@@ -3,29 +3,25 @@ name: GitOps CI - Voting App
 on:
   push:
     branches: [ dev ]
-    # Only run when code in these folders changes
+    # The pipeline only triggers if code in these specific folders is changed
     paths:
       - 'vote/**'
       - 'result/**'
       - 'worker/**'
 
 jobs:
-  build-and-deploy:
+  # JOB 1: Build and Push Images in Parallel
+  build-images:
     runs-on: ubuntu-latest
     strategy:
-      # This allows all 3 services to build at the same time
       matrix:
         service: [vote, result, worker]
     
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-        with:
-          # Required to push changes back to the repo
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0
 
-      # 1. Detect if THIS specific service folder changed
+      # 1. Detect if THIS specific service in the matrix changed
       - name: Check for changes
         uses: dorny/paths-filter@v3
         id: filter
@@ -41,7 +37,7 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # 3. Build and Push (Using Git SHA as the tag)
+      # 3. Build and Push (Tagged with the unique Git SHA)
       - name: Build and Push Image
         if: steps.filter.outputs.changed == 'true'
         uses: docker/build-push-action@v5
@@ -50,17 +46,60 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/voting-app-${{ matrix.service }}:${{ github.sha }}
 
-      # 4. Update the K8s Manifest in Git (The GitOps Core)
-      - name: Update Kubernetes Manifest
-        if: steps.filter.outputs.changed == 'true'
+  # JOB 2: Update Kubernetes Manifests Safely
+  update-manifests:
+    needs: build-images
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ github.token }}
+          fetch-depth: 0
+
+      # 1. Run the path filter again to see exactly what changed in this entire commit
+      - name: Detect Changed Services
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            vote: ['vote/**']
+            result: ['result/**']
+            worker: ['worker/**']
+
+      # 2. Conditionally update only the YAML files that have a newly built image
+      - name: Update YAML files and Push to Git
         run: |
+          # Setup Git Bot Identity
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
           
-          # Use sed to find the 'image:' line for this service and swap the tag
-          # We target the specific deployment file in your k8s-specifications folder
-          sed -i "s|image: .*examplevotingapp_${{ matrix.service }}.*|image: ${{ secrets.DOCKER_USERNAME }}/examplevotingapp_${{ matrix.service }}:${{ github.sha }}|g" k8s-specifications/${{ matrix.service }}-deployment.yaml
+          # Conditionally update Vote
+          if [ "${{ steps.filter.outputs.vote }}" == "true" ]; then
+            echo "Updating Vote manifest..."
+            sed -i "s|image: .*voting-app-vote:.*|image: ${{ secrets.DOCKER_USERNAME }}/voting-app-vote:${{ github.sha }}|g" k8s-specifications/vote-deployment.yaml
+          fi
           
-          git add k8s-specifications/${{ matrix.service }}-deployment.yaml
-          git commit -m "chore: update ${{ matrix.service }} image to ${{ github.sha }}"
-          git push origin dev
+          # Conditionally update Result
+          if [ "${{ steps.filter.outputs.result }}" == "true" ]; then
+            echo "Updating Result manifest..."
+            sed -i "s|image: .*voting-app-result:.*|image: ${{ secrets.DOCKER_USERNAME }}/voting-app-result:${{ github.sha }}|g" k8s-specifications/result-deployment.yaml
+          fi
+          
+          # Conditionally update Worker
+          if [ "${{ steps.filter.outputs.worker }}" == "true" ]; then
+            echo "Updating Worker manifest..."
+            sed -i "s|image: .*voting-app-worker:.*|image: ${{ secrets.DOCKER_USERNAME }}/voting-app-worker:${{ github.sha }}|g" k8s-specifications/worker-deployment.yaml
+          fi
+          
+          # Stage the updated YAML files
+          git add k8s-specifications/*.yaml
+          
+          # Check if there are actually changes to commit (prevents empty commit errors)
+          if git diff --staged --quiet; then
+            echo "No manifest changes required. Exiting cleanly."
+          else
+            git commit -m "chore: update K8s manifests for GitOps to SHA ${{ github.sha }}"
+            git push origin dev
+            echo "Successfully pushed updated manifests to dev branch!"
+          fi
