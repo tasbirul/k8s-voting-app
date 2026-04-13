@@ -13,7 +13,7 @@ WORKDIR /usr/local/app
 COPY requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# dev defines a stage for development, where it'll watch for filesystem changes
+# dev defines a stage for development, where it'll watch for filesystem changes.
 FROM base AS dev
 RUN pip install watchdog
 ENV FLASK_ENV=development

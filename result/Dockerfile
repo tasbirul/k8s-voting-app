@@ -20,6 +20,6 @@ COPY . .
 
 ENV PORT=80
 EXPOSE 80
-# Tini is a tiny init for containers
+# Tini is a tiny init for containers.
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["node", "server.js"]
