@@ -19,7 +19,7 @@ RUN pip install watchdog
 ENV FLASK_ENV=development
 CMD ["python", "app.py"]
 
-# final defines the stage that will bundle the application for production
+# final defines the stage that will bundle the application for production.
 FROM base AS final
 
 # Copy our code from the current folder to the working directory inside the container

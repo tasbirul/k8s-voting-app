@@ -13,7 +13,7 @@ ARG TARGETPLATFORM
 ARG TARGETARCH
 ARG BUILDPLATFORM
 RUN echo "I am running on $BUILDPLATFORM, building for $TARGETPLATFORM"
-
+# Set the working directory.
 WORKDIR /source
 COPY *.csproj .
 RUN dotnet restore -a $TARGETARCH
