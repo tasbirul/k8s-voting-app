@@ -1,0 +1,11 @@
+---
+# =============================================================================
+# roles/common/handlers/main.yml
+# Handlers triggered by notify directives in the common role tasks.
+# =============================================================================
+
+- name: Restart containerd
+  ansible.builtin.systemd:
+    name: containerd
+    state: restarted
+    daemon_reload: true

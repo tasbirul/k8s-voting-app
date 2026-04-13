@@ -1,0 +1,48 @@
+
+---
+# =============================================================================
+# site.yml — Full Kubernetes Cluster Provisioning Playbook
+# =============================================================================
+# Execution Order:
+#   Play 1 → common role on ALL nodes (containerd + k8s components)
+#   Play 2 → kubernetes_master role on master (kubeadm init + CNI + join cmd)
+#   Play 3 → kubernetes_worker role on workers (kubeadm join using master's fact)
+#
+# Run with:
+#   ansible-playbook playbooks/site.yml
+#
+# Dry-run (check mode):
+#   ansible-playbook playbooks/site.yml --check
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Play 1: System prerequisites and Kubernetes components on ALL nodes
+# -----------------------------------------------------------------------------
+- name: "Play 1 | Configure common prerequisites on all nodes"
+  hosts: tag_Role_master:tag_Role_worker
+  become: true
+  gather_facts: true
+  roles:
+    - role: common
+
+# -----------------------------------------------------------------------------
+# Play 2: Initialize the Kubernetes control-plane on the master node
+# -----------------------------------------------------------------------------
+- name: "Play 2 | Initialize Kubernetes master node"
+  hosts: tag_Role_master
+  become: true
+  gather_facts: true
+  roles:
+    - role: kubernetes_master
+
+# -----------------------------------------------------------------------------
+# Play 3: Join worker nodes to the cluster
+# The join command is captured as a fact during Play 2 and referenced here
+# via hostvars from the master host.
+# -----------------------------------------------------------------------------
+- name: "Play 3 | Join worker nodes to the cluster"
+  hosts: tag_Role_worker
+  become: true
+  gather_facts: true
+  roles:
+    - role: kubernetes_worker

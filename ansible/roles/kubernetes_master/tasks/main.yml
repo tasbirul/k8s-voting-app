@@ -1,0 +1,84 @@
+---
+# =============================================================================
+# roles/kubernetes_master/tasks/main.yml
+# Initializes the Kubernetes control-plane and captures the worker join command
+# as an Ansible fact so Play 3 (kubernetes_worker role) can use it.
+# =============================================================================
+
+# ── 1. Render kubeadm configuration ──────────────────────────────────────────
+- name: "Master | Render kubeadm init config template"
+  ansible.builtin.template:
+    src: kubeadm-config.j2
+    dest: "{{ kubeadm_config_path }}"
+    mode: '0644'
+
+# ── 2. Initialize the cluster ─────────────────────────────────────────────────
+# idempotent: skip if the admin kubeconfig already exists (cluster already init'd)
+- name: "Master | Check if cluster is already initialized"
+  ansible.builtin.stat:
+    path: "{{ admin_kubeconfig }}"
+  register: kubeadm_init_stat
+
+- name: "Master | Run kubeadm init"
+  ansible.builtin.command:
+    cmd: kubeadm init --config {{ kubeadm_config_path }}
+  when: not kubeadm_init_stat.stat.exists
+  register: kubeadm_init_output
+
+# ── 3. Configure kubeconfig for the ubuntu user ───────────────────────────────
+- name: "Master | Create .kube directory for {{ kube_user }}"
+  ansible.builtin.file:
+    path: "{{ kube_user_home }}/.kube"
+    state: directory
+    owner: "{{ kube_user }}"
+    group: "{{ kube_user }}"
+    mode: '0755'
+
+- name: "Master | Copy admin.conf to {{ kube_user }} home directory"
+  ansible.builtin.copy:
+    src: "{{ admin_kubeconfig }}"
+    dest: "{{ kube_user_home }}/.kube/config"
+    remote_src: true
+    owner: "{{ kube_user }}"
+    group: "{{ kube_user }}"
+    mode: '0600'
+
+# ── 4. Install Calico CNI ─────────────────────────────────────────────────────
+- name: "Master | Wait for the API server to be ready before applying CNI"
+  ansible.builtin.command:
+    cmd: kubectl --kubeconfig={{ admin_kubeconfig }} get nodes
+  register: kubectl_ready
+  until: kubectl_ready.rc == 0
+  retries: 15
+  delay: 10
+  changed_when: false
+
+- name: "Master | Check if Calico is already installed"
+  ansible.builtin.command:
+    cmd: kubectl --kubeconfig={{ admin_kubeconfig }} get daemonset calico-node -n kube-system
+  register: calico_check
+  failed_when: false
+  changed_when: false
+
+- name: "Master | Apply Calico CNI manifest"
+  ansible.builtin.command:
+    cmd: kubectl --kubeconfig={{ admin_kubeconfig }} apply -f {{ calico_manifest_url }}
+  when: calico_check.rc != 0
+
+# ── 5. Generate and capture the worker join command ───────────────────────────
+# This command is registered as an Ansible fact on the master host.
+# The kubernetes_worker role reads it via:
+#   hostvars[groups['tag_Role_master'][0]]['kubeadm_join_command']
+- name: "Master | Generate kubeadm join command"
+  ansible.builtin.command:
+    cmd: kubeadm token create --print-join-command
+  register: kubeadm_join_command_result
+  changed_when: false
+
+- name: "Master | Store join command as a host fact for workers to consume"
+  ansible.builtin.set_fact:
+    kubeadm_join_command: "{{ kubeadm_join_command_result.stdout }}"
+
+- name: "Master | Display join command (informational)"
+  ansible.builtin.debug:
+    msg: "Worker join command: {{ kubeadm_join_command }}"

@@ -4,3 +4,21 @@ bin/
 obj/
 .vs/
 node_modules/
+
+# MacOS
+.DS_Store
+**/.DS_Store
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+.terraform.lock.hcl
+.terraform.tfstate.backup
+
+# Ansible
+*.retry
+ansible/inventory/hosts
+*.log

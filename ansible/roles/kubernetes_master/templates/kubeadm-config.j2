@@ -1,0 +1,38 @@
+{# =============================================================================
+   kubeadm-config.j2
+   Rendered by the kubernetes_master role onto the master node.
+   Uses Ansible facts (ansible_default_ipv4.address for the private IP) so that
+   the advertise address is always correct regardless of the public/private split.
+   Docs: https://kubernetes.io/docs/reference/config-api/kubeadm-config.v1beta3/
+   ============================================================================= #}
+---
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: InitConfiguration
+localAPIEndpoint:
+  # Advertise the private IP so all cluster-internal communication stays on the VPC
+  advertiseAddress: "{{ ansible_default_ipv4.address }}"
+  bindPort: 6443
+nodeRegistration:
+  criSocket: unix:///run/containerd/containerd.sock
+  # Include the public IP in the API server's SAN so you can reach it remotely
+  kubeletExtraArgs:
+    cloud-provider: ""
+
+---
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: ClusterConfiguration
+kubernetesVersion: "v{{ k8s_version }}.0"
+apiServer:
+  certSANs:
+    # Add both the private IP and the public IP (for remote kubectl access)
+    - "{{ ansible_default_ipv4.address }}"
+    - "{{ ansible_host }}"
+networking:
+  podSubnet: "{{ pod_network_cidr }}"
+  serviceSubnet: "10.96.0.0/12"
+
+---
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+# Use systemd as the cgroup driver — MUST match containerd's SystemdCgroup = true
+cgroupDriver: systemd

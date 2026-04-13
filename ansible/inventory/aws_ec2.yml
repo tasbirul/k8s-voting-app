@@ -1,0 +1,44 @@
+---
+# AWS EC2 Dynamic Inventory Plugin
+# Docs: https://docs.ansible.com/ansible/latest/collections/amazon/aws/aws_ec2_inventory.html
+#
+# Prerequisites:
+#   - boto3 and botocore must be installed: pip install boto3 botocore
+#   - AWS credentials must be available via one of:
+#       a) Environment variables: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION
+#       b) AWS CLI profile:       export AWS_PROFILE=your-profile-name
+#       c) IAM Instance Role:     automatically used if running on an EC2 instance
+#
+# Usage:
+#   ansible-inventory -i inventory/aws_ec2.yml --list   # verify discovered hosts
+#   ansible-inventory -i inventory/aws_ec2.yml --graph  # view host groupings
+
+plugin: amazon.aws.aws_ec2
+
+# Target the same region as the Terraform configuration
+regions:
+  - us-east-1
+
+# Only discover instances tagged with this project and in a running state
+filters:
+  tag:Project: kubeadm
+  instance-state-name: running
+
+# Auto-create host groups from the 'Role' tag on each instance.
+# This produces two groups automatically:
+#   - tag_Role_master   (from instances tagged Role=master)
+#   - tag_Role_worker   (from instances tagged Role=worker)
+keyed_groups:
+  - key: tags.Role
+    prefix: tag_Role
+    separator: "_"
+
+# Use the instance-id as the host name to ensure each node is unique in Ansible.
+# We also include public-ip-address as a fallback.
+hostnames:
+  - instance-id
+  - public-ip-address
+
+# Expose the public IP as the Ansible connection target
+compose:
+  ansible_host: public_ip_address

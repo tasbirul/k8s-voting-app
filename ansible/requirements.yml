@@ -1,0 +1,12 @@
+---
+# Ansible Galaxy collection requirements
+# Install with: ansible-galaxy collection install -r requirements.yml
+
+collections:
+  # Provides the aws_ec2 dynamic inventory plugin and ec2_metadata_facts module
+  - name: amazon.aws
+    version: ">=7.0.0"
+
+  # Provides general utilities used across roles (e.g. community.general.sysctl)
+  - name: community.general
+    version: ">=8.0.0"

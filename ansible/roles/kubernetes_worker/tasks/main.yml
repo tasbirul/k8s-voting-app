@@ -1,0 +1,37 @@
+---
+# =============================================================================
+# roles/kubernetes_worker/tasks/main.yml
+# Joins each worker node to the Kubernetes cluster.
+#
+# The join command is read from the master node's Ansible host facts.
+# It was captured by the kubernetes_master role during Play 2 using set_fact,
+# and is now accessible via hostvars on the master host.
+# =============================================================================
+
+# ── 1. Check if this worker is already part of the cluster ───────────────────
+# Idempotency: if the kubelet config exists, kubeadm join has already run.
+- name: "Worker | Check if node is already joined to the cluster"
+  ansible.builtin.stat:
+    path: /etc/kubernetes/kubelet.conf
+  register: kubelet_conf_stat
+
+# ── 2. Retrieve the join command from the master node's facts ─────────────────
+- name: "Worker | Read kubeadm join command from master host facts"
+  ansible.builtin.set_fact:
+    worker_join_command: >-
+      {{ hostvars[groups['tag_Role_master'][0]]['kubeadm_join_command'] }}
+  when: not kubelet_conf_stat.stat.exists
+
+# ── 3. Execute the join ───────────────────────────────────────────────────────
+- name: "Worker | Join this node to the Kubernetes cluster"
+  ansible.builtin.command:
+    cmd: "{{ worker_join_command }}"
+  when: not kubelet_conf_stat.stat.exists
+  register: kubeadm_join_result
+
+- name: "Worker | Display join result"
+  ansible.builtin.debug:
+    var: kubeadm_join_result.stdout_lines
+  when:
+    - not kubelet_conf_stat.stat.exists
+    - kubeadm_join_result is defined

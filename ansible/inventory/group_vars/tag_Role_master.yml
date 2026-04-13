@@ -1,0 +1,11 @@
+---
+# Variables specific to the master node group (tag_Role_master).
+# These override values from group_vars/all.yml for the master.
+
+node_role: master
+
+# kubeadm init config file path on the remote host
+kubeadm_config_path: /tmp/kubeadm-config.yml
+
+# Path to the admin kubeconfig on the master node
+admin_kubeconfig: /etc/kubernetes/admin.conf

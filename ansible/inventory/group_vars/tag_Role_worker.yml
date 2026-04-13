@@ -1,0 +1,5 @@
+---
+# Variables specific to the worker node group (tag_Role_worker).
+# These override values from group_vars/all.yml for the workers.
+
+node_role: worker
