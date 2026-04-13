@@ -1,49 +1,204 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <title>{{option_a}} vs {{option_b}}!</title>
-    <base href="/index.html">
-    <meta name = "viewport" content = "width=device-width, initial-scale = 1.0">
-    <meta name="keywords" content="docker-compose, docker, stack">
-    <meta name="author" content="Tutum dev team">
-    <link rel='stylesheet' href="{{ url_for('static',filename='stylesheets/style.css') }}" />
-    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.4.0/css/font-awesome.min.css">
-  </head>
-  <body>
-    <div id="content-container">
-      <div id="content-container-center">
-        <h3>{{option_a}} vs {{option_b}}!</h3>
-        <form id="choice" name='form' method="POST" action="/">
-          <button id="a" type="submit" name="vote" class="a" value="a">{{option_a}}</button>
-          <button id="b" type="submit" name="vote" class="b" value="b">{{option_b}}</button>
-        </form>
-        <div id="tip">
-          (Tip: you can change your vote)
-        </div>
-        <div id="hostname">
-          Processed by container ID {{hostname}}
-        </div>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <title>{{option_a}} vs {{option_b}} - Cast Your Vote!</title>
+  <base href="/index.html">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="keywords" content="docker-compose, docker, podman, stack, containers">
+
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.4.0/css/font-awesome.min.css">
+
+  <style>
+    /* --- Modern Dark Theme & Glassmorphism --- */
+    :root {
+      --color-a: #2496ed;
+      /* Docker Blue */
+      --color-b: #892ca0;
+      /* Podman Purple */
+      --bg-color: #0f172a;
+      --card-bg: rgba(30, 41, 59, 0.6);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    body {
+      margin: 0;
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg-color);
+      background-image: radial-gradient(circle at top right, #1e293b, #0f172a);
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+
+    #content-container {
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 20px;
+      padding: 3rem 2rem;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      text-align: center;
+      max-width: 600px;
+      width: 90%;
+      animation: fadeIn 0.6s ease-out;
+    }
+
+    h3 {
+      font-size: 2.5rem;
+      font-weight: 800;
+      margin-top: 0;
+      margin-bottom: 2rem;
+      background: linear-gradient(45deg, var(--color-a), var(--color-b));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -1px;
+    }
+
+    #choice {
+      display: flex;
+      gap: 1.5rem;
+      justify-content: center;
+      margin-bottom: 2rem;
+    }
+
+    button {
+      flex: 1;
+      padding: 1.5rem 1rem;
+      font-size: 1.5rem;
+      font-weight: 600;
+      border: 2px solid transparent;
+      border-radius: 14px;
+      cursor: pointer;
+      color: white;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    button.a {
+      background-color: var(--color-a);
+    }
+
+    button.b {
+      background-color: var(--color-b);
+    }
+
+    button:hover:not(:disabled) {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
+      filter: brightness(1.1);
+    }
+
+    button:active:not(:disabled) {
+      transform: translateY(0);
+    }
+
+    button:disabled {
+      cursor: default;
+    }
+
+    /* --- JS Interaction Classes --- */
+    .voted-btn {
+      border-color: rgba(255, 255, 255, 0.5);
+      box-shadow: 0 0 20px rgba(255, 255, 255, 0.15);
+    }
+
+    .dimmed-btn {
+      opacity: 0.3;
+      filter: grayscale(60%);
+    }
+
+    #tip {
+      font-size: 0.95rem;
+      color: var(--text-muted);
+      margin-bottom: 2rem;
+      font-style: italic;
+    }
+
+    #hostname {
+      font-size: 0.8rem;
+      font-family: monospace;
+      background: rgba(0, 0, 0, 0.4);
+      padding: 0.6rem 1.2rem;
+      border-radius: 30px;
+      display: inline-block;
+      color: var(--text-muted);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* Responsive stacking for mobile */
+    @media (max-width: 480px) {
+      #choice {
+        flex-direction: column;
+      }
+
+      h3 {
+        font-size: 2rem;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div id="content-container">
+    <div id="content-container-center">
+      <h3>{{option_a}} vs {{option_b}}</h3>
+
+      <form id="choice" name='form' method="POST" action="/">
+        <button id="a" type="submit" name="vote" class="a" value="a">{{option_a}}</button>
+        <button id="b" type="submit" name="vote" class="b" value="b">{{option_b}}</button>
+      </form>
+
+      <div id="tip">
+        (Tip: you can always change your vote!)
+      </div>
+
+      <div id="hostname">
+        <i class="fa fa-server"></i> Processed by container {{hostname}}
       </div>
     </div>
-    <script src="http://code.jquery.com/jquery-latest.min.js" type="text/javascript"></script>
-    <script src="//cdnjs.cloudflare.com/ajax/libs/jquery-cookie/1.4.1/jquery.cookie.js"></script>
+  </div>
 
-    {% if vote %}
-    <script>
-      var vote = "{{vote}}";
+  <script src="http://code.jquery.com/jquery-latest.min.js" type="text/javascript"></script>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/jquery-cookie/1.4.1/jquery.cookie.js"></script>
 
-      if(vote == "a"){
-        $(".a").prop('disabled', true);
-        $(".a").html('{{option_a}} <i class="fa fa-check-circle"></i>');
-        $(".b").css('opacity','0.5');
-      }
-      if(vote == "b"){
-        $(".b").prop('disabled', true);
-        $(".b").html('{{option_b}} <i class="fa fa-check-circle"></i>');
-        $(".a").css('opacity','0.5');
-      }
-    </script>
-    {% endif %}
-  </body>
+  {% if vote %}
+  <script>
+    var vote = "{{vote}}";
+
+    // Updated JS to use CSS classes instead of direct style injection for smoother transitions
+    if (vote === "a") {
+      $(".a").prop('disabled', true).addClass('voted-btn').html('{{option_a}} <i class="fa fa-check-circle"></i>');
+      $(".b").addClass('dimmed-btn');
+    }
+    if (vote === "b") {
+      $(".b").prop('disabled', true).addClass('voted-btn').html('{{option_b}} <i class="fa fa-check-circle"></i>');
+      $(".a").addClass('dimmed-btn');
+    }
+  </script>
+  {% endif %}
+</body>
+
 </html>
