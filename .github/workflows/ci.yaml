@@ -57,7 +57,6 @@ jobs:
           token: ${{ github.token }}
           fetch-depth: 0
 
-      # 1. Run the path filter again to see exactly what changed in this entire commit
       - name: Detect Changed Services
         uses: dorny/paths-filter@v3
         id: filter
@@ -67,35 +66,33 @@ jobs:
             result: ['result/**']
             worker: ['worker/**']
 
-      # 2. Conditionally update only the YAML files that have a newly built image
       - name: Update YAML files and Push to Git
         run: |
-          # Setup Git Bot Identity
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
           
           # Conditionally update Vote
           if [ "${{ steps.filter.outputs.vote }}" == "true" ]; then
             echo "Updating Vote manifest..."
-            sed -i "s|image: .*voting-app-vote:.*|image: ${{ secrets.DOCKER_USERNAME }}/voting-app-vote:${{ github.sha }}|g" k8s-specifications/vote-deployment.yaml
+            # -E enables extended regex. It finds ANY image line containing "vote"
+            sed -i -E "s|image: .*vote.*|image: ${{ secrets.DOCKER_USERNAME }}/voting-app-vote:${{ github.sha }}|g" k8s-specifications/vote-deployment.yaml
           fi
           
           # Conditionally update Result
           if [ "${{ steps.filter.outputs.result }}" == "true" ]; then
             echo "Updating Result manifest..."
-            sed -i "s|image: .*voting-app-result:.*|image: ${{ secrets.DOCKER_USERNAME }}/voting-app-result:${{ github.sha }}|g" k8s-specifications/result-deployment.yaml
+            sed -i -E "s|image: .*result.*|image: ${{ secrets.DOCKER_USERNAME }}/voting-app-result:${{ github.sha }}|g" k8s-specifications/result-deployment.yaml
           fi
           
           # Conditionally update Worker
           if [ "${{ steps.filter.outputs.worker }}" == "true" ]; then
             echo "Updating Worker manifest..."
-            sed -i "s|image: .*voting-app-worker:.*|image: ${{ secrets.DOCKER_USERNAME }}/voting-app-worker:${{ github.sha }}|g" k8s-specifications/worker-deployment.yaml
+            sed -i -E "s|image: .*worker.*|image: ${{ secrets.DOCKER_USERNAME }}/voting-app-worker:${{ github.sha }}|g" k8s-specifications/worker-deployment.yaml
           fi
           
-          # Stage the updated YAML files
           git add k8s-specifications/*.yaml
           
-          # Check if there are actually changes to commit (prevents empty commit errors)
+          # Check if there are actually changes to commit
           if git diff --staged --quiet; then
             echo "No manifest changes required. Exiting cleanly."
           else

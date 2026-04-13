@@ -17,9 +17,9 @@ RUN npm ci && \
     mv /usr/local/app/node_modules /node_modules
 
 COPY . .
-# Set the port to 80
+# Set the port to 80.
 ENV PORT=80
-# Expose the port
+# Expose the port.
 EXPOSE 80
 # Tini is a tiny init for containers.
 ENTRYPOINT ["/usr/bin/tini", "--"]
