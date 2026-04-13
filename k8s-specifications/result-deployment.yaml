@@ -15,7 +15,7 @@ spec:
         app: result
     spec:
       containers:
-      - image: tasbirul/examplevotingapp_result:a471c6f422a06048e26633fb36bbc578adebca58
+      - image: tasbirul/voting-app-result:88f0d36d20ebe0144a03d41b028708de2b584404
         name: result
         ports:
         - containerPort: 80
