@@ -15,5 +15,5 @@ spec:
         app: worker
     spec:
       containers:
-      - image: tasbirul/examplevotingapp_worker:a9d108a7a15370be48671f5f010f8bda973cab76
+      - image: tasbirul/voting-app-worker:5306a501f07fafd7d7d745093b4672d913b42db9
         name: worker
