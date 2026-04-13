@@ -1,0 +1,66 @@
+name: GitOps CI - Voting App
+
+on:
+  push:
+    branches: [ dev ]
+    # Only run when code in these folders changes
+    paths:
+      - 'vote/**'
+      - 'result/**'
+      - 'worker/**'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    strategy:
+      # This allows all 3 services to build at the same time
+      matrix:
+        service: [vote, result, worker]
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          # Required to push changes back to the repo
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      # 1. Detect if THIS specific service folder changed
+      - name: Check for changes
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            changed: ['./${{ matrix.service }}/**']
+
+      # 2. Login to Docker Hub (Only if changes detected)
+      - name: Login to Docker Hub
+        if: steps.filter.outputs.changed == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      # 3. Build and Push (Using Git SHA as the tag)
+      - name: Build and Push Image
+        if: steps.filter.outputs.changed == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: ./${{ matrix.service }}
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/voting-app-${{ matrix.service }}:${{ github.sha }}
+
+      # 4. Update the K8s Manifest in Git (The GitOps Core)
+      - name: Update Kubernetes Manifest
+        if: steps.filter.outputs.changed == 'true'
+        run: |
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "actions@github.com"
+          
+          # Use sed to find the 'image:' line for this service and swap the tag
+          # We target the specific deployment file in your k8s-specifications folder
+          sed -i "s|image: .*examplevotingapp_${{ matrix.service }}.*|image: ${{ secrets.DOCKER_USERNAME }}/examplevotingapp_${{ matrix.service }}:${{ github.sha }}|g" k8s-specifications/${{ matrix.service }}-deployment.yaml
+          
+          git add k8s-specifications/${{ matrix.service }}-deployment.yaml
+          git commit -m "chore: update ${{ matrix.service }} image to ${{ github.sha }}"
+          git push origin dev
