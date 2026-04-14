@@ -66,3 +66,19 @@
       - "Access URL: https://<master-node-public-ip>:{{ argocd_nodeport.stdout }}"
       - "Username: admin"
       - "Password: {{ argocd_initial_password }}"
+
+- name: "ArgoCD | Wait for ArgoCD API to be ready"
+  ansible.builtin.pause:
+    seconds: 30
+
+- name: "ArgoCD | Copy Voting App Application manifest"
+  ansible.builtin.copy:
+    src: voting-app-argo.yaml
+    dest: /tmp/voting-app-argo.yaml
+    mode: '0644'
+
+- name: "ArgoCD | Deploy the Voting App Application"
+  ansible.builtin.command:
+    cmd: kubectl --kubeconfig={{ admin_kubeconfig }} apply -f /tmp/voting-app-argo.yaml
+  register: deploy_app
+  changed_when: "'created' in deploy_app.stdout or 'configured' in deploy_app.stdout"
