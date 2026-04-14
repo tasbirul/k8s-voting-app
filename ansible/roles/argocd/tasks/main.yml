@@ -1,0 +1,68 @@
+---
+# =============================================================================
+# roles/argocd/tasks/main.yml
+# Installs ArgoCD via raw manifests using Server-Side Apply.
+# =============================================================================
+
+- name: "ArgoCD | Create namespace"
+  ansible.builtin.command:
+    cmd: kubectl --kubeconfig={{ admin_kubeconfig }} create namespace {{ argocd_namespace }}
+  register: create_ns
+  failed_when: 
+    - create_ns.rc != 0
+    - "'AlreadyExists' not in create_ns.stderr"
+  changed_when: "create_ns.rc == 0"
+
+- name: "ArgoCD | Apply installation manifest (Server-Side)"
+  ansible.builtin.command:
+    cmd: >-
+      kubectl --kubeconfig={{ admin_kubeconfig }} apply 
+      --server-side --force-conflicts
+      -n {{ argocd_namespace }} -f {{ argocd_manifest_url }}
+  register: apply_manifest
+  changed_when: "'created' in apply_manifest.stdout or 'configured' in apply_manifest.stdout"
+
+- name: "ArgoCD | Patch service to NodePort"
+  ansible.builtin.command:
+    cmd: >-
+      kubectl --kubeconfig={{ admin_kubeconfig }} patch svc argocd-server
+      -n {{ argocd_namespace }} -p '{"spec": {"type": "NodePort"}}'
+  register: patch_svc
+  changed_when: "'patched' in patch_svc.stdout"
+
+- name: "ArgoCD | Wait for ArgoCD server deployment to be available"
+  ansible.builtin.command:
+    cmd: >-
+      kubectl --kubeconfig={{ admin_kubeconfig }} rollout status deployment/argocd-server
+      -n {{ argocd_namespace }} --timeout=300s
+  register: wait_deploy
+  changed_when: false
+
+- name: "ArgoCD | Fetch initial admin password"
+  ansible.builtin.command:
+    cmd: >-
+      kubectl --kubeconfig={{ admin_kubeconfig }} -n {{ argocd_namespace }} 
+      get secret argocd-initial-admin-secret 
+      -o jsonpath="{.data.password}"
+  register: argocd_password_b64
+  changed_when: false
+
+- name: "ArgoCD | Decode admin password"
+  ansible.builtin.set_fact:
+    argocd_initial_password: "{{ argocd_password_b64.stdout | b64decode }}"
+
+- name: "ArgoCD | Get NodePort for argocd-server"
+  ansible.builtin.command:
+    cmd: >-
+      kubectl --kubeconfig={{ admin_kubeconfig }} -n {{ argocd_namespace }}
+      get svc argocd-server -o jsonpath='{.spec.ports[?(@.port==443)].nodePort}'
+  register: argocd_nodeport
+  changed_when: false
+
+- name: "ArgoCD | Display Access Info"
+  ansible.builtin.debug:
+    msg: 
+      - "ArgoCD is installed!"
+      - "Access URL: https://<master-node-public-ip>:{{ argocd_nodeport.stdout }}"
+      - "Username: admin"
+      - "Password: {{ argocd_initial_password }}"

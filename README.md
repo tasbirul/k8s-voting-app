@@ -28,24 +28,48 @@ Once you have your swarm, in this directory run:
 docker stack deploy --compose-file docker-stack.yml vote
 ```
 
-## Run the app in Kubernetes
 
-The folder k8s-specifications contains the YAML specifications of the Voting App's services.
 
-Run the following command to create the deployments and services. Note it will create these resources in your current namespace (`default` if you haven't changed it.)
+### 1. Provision Infrastructure
 
-```shell
-kubectl create -f k8s-specifications/
+Navigate to the `terraform` directory, initialize the backend, and apply the plan:
+
+```bash
+cd terraform
+terraform init
+terraform apply
 ```
 
-The `vote` web app is then available on port 31000 on each host of the cluster, the `result` web app is available on port 31001.
+> [!TIP]
+> This will create 1 Master and 2 Worker nodes (`t3.small`). You can customize the region and instance types in `variables.tf`.
 
-To remove them, run:
+Take note of the `master_public_ip` from the Terraform output.
 
-```shell
-kubectl delete -f k8s-specifications/
+### 2. Configure the Cluster
+
+Navigate to the `ansible` directory and set up the environment:
+
+#### Install Requirements
+Install the required Ansible collections (AWS and General utilities):
+```bash
+cd ../ansible
+ansible-galaxy collection install -r requirements.yml
 ```
 
+#### Set Up SSH Key
+Ensure your AWS PEM key (`aws-vm-ssh-key.pem`) is moved to `~/.ssh/` and has the correct permissions:
+```bash
+chmod 400 ~/Documents/aws-vm-ssh-key.pem
+```
+
+#### Run the Playbook
+Execute the orchestration playbook. The dynamic inventory will automatically find your instances using the `Project: kubeadm` tag.
+
+```bash
+ansible-playbook playbooks/site.yml
+```
+
+---
 ## Architecture
 
 ![Architecture diagram](architecture.excalidraw.png)

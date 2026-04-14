@@ -20,3 +20,8 @@ containerd_config_path: /etc/containerd/config.toml
 # The non-root user on the Ubuntu AMI who will own the kubeconfig
 kube_user: ubuntu
 kube_user_home: /home/ubuntu
+
+# ── ArgoCD ───────────────────────────────────────────────────────────────────
+argocd_version: "stable"
+argocd_namespace: "argocd"
+argocd_manifest_url: "https://raw.githubusercontent.com/argoproj/argo-cd/{{ argocd_version }}/manifests/install.yaml"
