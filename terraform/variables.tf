@@ -1,7 +1,7 @@
 variable "aws_region" {
   description = "The AWS region to deploy into"
   type        = string
-  default     = "us-east-1" # Update if your AMI is in a different region
+  default     = "us-east-1"
 }
 
 variable "vpc_cidr" {
