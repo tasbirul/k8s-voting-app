@@ -136,6 +136,12 @@ resource "aws_instance" "master" {
 
   vpc_security_group_ids = [aws_security_group.k8s_sg.id]
 
+  root_block_device {
+    volume_size           = 10
+    volume_type           = "gp3"
+    delete_on_termination = true
+  }
+
   # Minimal cloud-init: only installs Python 3, which is required for Ansible to connect.
   # All K8s configuration is handled by the Ansible playbooks.
   user_data = <<-EOF
@@ -159,6 +165,12 @@ resource "aws_instance" "worker" {
   subnet_id     = aws_subnet.k8s_public_subnet.id
 
   vpc_security_group_ids = [aws_security_group.k8s_sg.id]
+
+  root_block_device {
+    volume_size           = 10
+    volume_type           = "gp3"
+    delete_on_termination = true
+  }
 
   # Minimal cloud-init: only installs Python 3, which is required for Ansible to connect.
   # All K8s configuration is handled by the Ansible playbooks.

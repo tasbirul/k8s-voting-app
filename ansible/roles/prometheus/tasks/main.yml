@@ -1,0 +1,189 @@
+---
+# =============================================================================
+# roles/prometheus/tasks/main.yml
+# Installs Prometheus + Grafana onto the cluster using the
+# kube-prometheus-stack Helm chart (prometheus-community).
+#
+# Stack installed:
+#   • Prometheus (with cluster-wide RBAC scrape config)
+#   • Alertmanager
+#   • Grafana (pre-configured, datasource wired to Prometheus)
+#   • node-exporter (DaemonSet, collects host-level metrics)
+#   • kube-state-metrics (Deployment, exposes K8s object metrics)
+#
+# Idempotent: every step checks before acting.
+# =============================================================================
+
+# ── 1. Ensure Helm is installed ───────────────────────────────────────────────
+- name: "Monitoring | Check if Helm is already installed"
+  ansible.builtin.command:
+    cmd: helm version --short
+  register: helm_check
+  changed_when: false
+  failed_when: false
+
+- name: "Monitoring | Download Helm install script"
+  ansible.builtin.get_url:
+    url: https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+    dest: /tmp/get-helm-3.sh
+    mode: '0700'
+  when: helm_check.rc != 0
+
+- name: "Monitoring | Install Helm"
+  ansible.builtin.command:
+    cmd: /tmp/get-helm-3.sh
+  environment:
+    DESIRED_VERSION: "{{ helm_version }}"
+  when: helm_check.rc != 0
+  register: helm_install
+  changed_when: "'helm installed into' in helm_install.stdout"
+
+# ── 2. Create monitoring namespace ───────────────────────────────────────────
+- name: "Monitoring | Create '{{ monitoring_namespace }}' namespace"
+  ansible.builtin.command:
+    cmd: kubectl --kubeconfig={{ admin_kubeconfig }} create namespace {{ monitoring_namespace }}
+  register: create_ns
+  failed_when:
+    - create_ns.rc != 0
+    - "'AlreadyExists' not in create_ns.stderr"
+  changed_when: "create_ns.rc == 0"
+
+# ── 3. Add prometheus-community Helm repository ──────────────────────────────
+- name: "Monitoring | Add prometheus-community Helm repo"
+  ansible.builtin.command:
+    cmd: helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+  environment:
+    KUBECONFIG: "{{ admin_kubeconfig }}"
+  register: repo_add
+  changed_when: "'already exists' not in repo_add.stdout"
+  failed_when: "repo_add.rc != 0 and 'already exists' not in repo_add.stdout"
+
+- name: "Monitoring | Update Helm repositories"
+  ansible.builtin.command:
+    cmd: helm repo update
+  environment:
+    KUBECONFIG: "{{ admin_kubeconfig }}"
+  changed_when: false
+
+# ── 4. Deploy kube-prometheus-stack ──────────────────────────────────────────
+- name: "Monitoring | Check if kube-prometheus-stack is already deployed"
+  ansible.builtin.command:
+    cmd: >-
+      helm --kubeconfig={{ admin_kubeconfig }}
+      status {{ prometheus_release_name }} -n {{ monitoring_namespace }}
+  register: helm_status
+  changed_when: false
+  failed_when: false
+
+- name: "Monitoring | Deploy kube-prometheus-stack via Helm"
+  ansible.builtin.command:
+    cmd: >-
+      helm --kubeconfig={{ admin_kubeconfig }} upgrade --install
+      {{ prometheus_release_name }} prometheus-community/kube-prometheus-stack
+      --namespace {{ monitoring_namespace }}
+      --set prometheus.service.type=NodePort
+      --set prometheus.service.nodePort={{ prometheus_nodeport }}
+      --set grafana.service.type=NodePort
+      --set grafana.service.nodePort={{ grafana_nodeport }}
+      --set grafana.adminPassword={{ grafana_admin_password }}
+      --set alertmanager.service.type=NodePort
+      --set alertmanager.service.nodePort={{ alertmanager_nodeport }}
+      --set prometheus.prometheusSpec.scrapeInterval={{ prometheus_scrape_interval }}
+      --set prometheus.prometheusSpec.retention={{ prometheus_retention }}
+      --timeout {{ helm_install_timeout }}
+      --wait
+  environment:
+    KUBECONFIG: "{{ admin_kubeconfig }}"
+  register: helm_deploy
+  changed_when: "'deployed' in helm_deploy.stdout or 'upgraded' in helm_deploy.stdout"
+  when: helm_status.rc != 0
+
+- name: "Monitoring | Upgrade kube-prometheus-stack (already installed)"
+  ansible.builtin.command:
+    cmd: >-
+      helm --kubeconfig={{ admin_kubeconfig }} upgrade
+      {{ prometheus_release_name }} prometheus-community/kube-prometheus-stack
+      --namespace {{ monitoring_namespace }}
+      --set prometheus.service.type=NodePort
+      --set prometheus.service.nodePort={{ prometheus_nodeport }}
+      --set grafana.service.type=NodePort
+      --set grafana.service.nodePort={{ grafana_nodeport }}
+      --set grafana.adminPassword={{ grafana_admin_password }}
+      --set alertmanager.service.type=NodePort
+      --set alertmanager.service.nodePort={{ alertmanager_nodeport }}
+      --set prometheus.prometheusSpec.scrapeInterval={{ prometheus_scrape_interval }}
+      --set prometheus.prometheusSpec.retention={{ prometheus_retention }}
+      --timeout {{ helm_install_timeout }}
+      --wait
+  environment:
+    KUBECONFIG: "{{ admin_kubeconfig }}"
+  register: helm_upgrade
+  changed_when: "'has been upgraded' in helm_upgrade.stdout"
+  when: helm_status.rc == 0
+
+# ── 5. Wait for all monitoring pods to be ready ──────────────────────────────
+- name: "Monitoring | Wait for kube-state-metrics to be ready"
+  ansible.builtin.command:
+    cmd: >-
+      kubectl --kubeconfig={{ admin_kubeconfig }}
+      rollout status deployment/{{ prometheus_release_name }}-kube-state-metrics
+      -n {{ monitoring_namespace }} --timeout=300s
+  changed_when: false
+
+- name: "Monitoring | Wait for Grafana deployment to be ready"
+  ansible.builtin.command:
+    cmd: >-
+      kubectl --kubeconfig={{ admin_kubeconfig }}
+      rollout status deployment/{{ prometheus_release_name }}-grafana
+      -n {{ monitoring_namespace }} --timeout=300s
+  changed_when: false
+
+# ── 6. Retrieve access information ───────────────────────────────────────────
+- name: "Monitoring | Get Grafana NodePort"
+  ansible.builtin.command:
+    cmd: >-
+      kubectl --kubeconfig={{ admin_kubeconfig }}
+      -n {{ monitoring_namespace }}
+      get svc {{ prometheus_release_name }}-grafana
+      -o jsonpath='{.spec.ports[0].nodePort}'
+  register: grafana_port
+  changed_when: false
+
+- name: "Monitoring | Get Prometheus NodePort"
+  ansible.builtin.command:
+    cmd: >-
+      kubectl --kubeconfig={{ admin_kubeconfig }}
+      -n {{ monitoring_namespace }}
+      get svc {{ prometheus_release_name }}-kube-prometheus-stack-prometheus
+      -o jsonpath='{.spec.ports[0].nodePort}'
+  register: prometheus_port
+  changed_when: false
+
+- name: "Monitoring | Get Alertmanager NodePort"
+  ansible.builtin.command:
+    cmd: >-
+      kubectl --kubeconfig={{ admin_kubeconfig }}
+      -n {{ monitoring_namespace }}
+      get svc {{ prometheus_release_name }}-kube-prometheus-stack-alertmanager
+      -o jsonpath='{.spec.ports[0].nodePort}'
+  register: alertmanager_port
+  changed_when: false
+
+# ── 7. Print access summary ───────────────────────────────────────────────────
+- name: "Monitoring | Display Access Info"
+  ansible.builtin.debug:
+    msg:
+      - "============================================================"
+      - "  Prometheus + Grafana Stack successfully deployed!"
+      - "============================================================"
+      - "  Grafana:"
+      - "    URL      : http://<master-node-public-ip>:{{ grafana_port.stdout }}"
+      - "    Username : admin"
+      - "    Password : {{ grafana_admin_password }}"
+      - ""
+      - "  Prometheus:"
+      - "    URL      : http://<master-node-public-ip>:{{ prometheus_port.stdout }}"
+      - ""
+      - "  Alertmanager:"
+      - "    URL      : http://<master-node-public-ip>:{{ alertmanager_port.stdout }}"
+      - "============================================================"

@@ -21,4 +21,5 @@ node_modules/
 # Ansible
 *.retry
 ansible/inventory/hosts
+ansible/.env
 *.log

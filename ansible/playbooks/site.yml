@@ -57,3 +57,40 @@
   gather_facts: true
   roles:
     - role: argocd
+
+# -----------------------------------------------------------------------------
+# Play 5: Install Prometheus + Grafana monitoring stack on the master node
+# Uses kube-prometheus-stack Helm chart (includes Grafana, node-exporter,
+# kube-state-metrics, and Alertmanager).
+#
+# Secrets: reads GRAFANA_ADMIN_PASSWORD from ansible/.env on the Ansible
+# control node (your local machine). The .env file is git-ignored.
+# -----------------------------------------------------------------------------
+- name: "Play 5 | Install Prometheus + Grafana monitoring stack"
+  hosts: tag_Role_master
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    - name: "Monitoring | Read GRAFANA_ADMIN_PASSWORD from .env on controller"
+      ansible.builtin.set_fact:
+        grafana_admin_password: >-
+          {{
+            lookup('ansible.builtin.file', playbook_dir + '/../.env')
+            | regex_findall('(?m)^GRAFANA_ADMIN_PASSWORD=(.+)$')
+            | first
+            | trim
+          }}
+      delegate_to: localhost
+      run_once: true
+      no_log: true
+
+    - name: "Monitoring | Fail if GRAFANA_ADMIN_PASSWORD is not set in .env"
+      ansible.builtin.fail:
+        msg: >
+          GRAFANA_ADMIN_PASSWORD is empty or missing in ansible/.env.
+          Run: echo 'GRAFANA_ADMIN_PASSWORD=<your-password>' >> ansible/.env
+      when: grafana_admin_password | length == 0
+
+  roles:
+    - role: prometheus

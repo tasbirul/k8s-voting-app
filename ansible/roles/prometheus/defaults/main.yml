@@ -1,0 +1,31 @@
+---
+# =============================================================================
+# roles/prometheus/defaults/main.yml
+# Default variables for the Prometheus + Grafana monitoring role.
+# Override these in group_vars/all.yml or via --extra-vars.
+# =============================================================================
+
+# ── Kubernetes ────────────────────────────────────────────────────────────────
+admin_kubeconfig: /etc/kubernetes/admin.conf
+monitoring_namespace: monitoring
+
+# ── Helm ─────────────────────────────────────────────────────────────────────
+helm_version: "v3.14.4"
+prometheus_release_name: kps
+helm_install_timeout: 10m0s
+
+# ── NodePort assignments (must be in range 30000–32767) ──────────────────────
+grafana_nodeport: 30300
+prometheus_nodeport: 30090
+alertmanager_nodeport: 30093
+
+# ── Grafana ───────────────────────────────────────────────────────────────────
+# Password is loaded at runtime from ansible/.env via a pre_task in site.yml.
+# Do NOT set a value here — leave empty so the playbook fails loudly
+# if the .env file is missing or the variable is not exported.
+# To set the password: edit ansible/.env  →  GRAFANA_ADMIN_PASSWORD=<your-password>
+grafana_admin_password: ""
+
+# ── Prometheus ────────────────────────────────────────────────────────────────
+prometheus_scrape_interval: 30s
+prometheus_retention: 15d
