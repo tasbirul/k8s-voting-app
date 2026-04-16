@@ -57,6 +57,8 @@ spec:
           value: postgres
         - name: POSTGRES_PASSWORD
           value: postgres
+        - name: POSTGRES_INITDB_ARGS
+          value: "--auth-host=md5 --auth-local=md5"
         ports:
         - containerPort: 5432
           name: postgres
