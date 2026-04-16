@@ -1,16 +1,14 @@
-FROM node:18-slim
+FROM node:18-alpine
 
-# add curl for healthcheck
-# hadolint ignore=DL3008
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
+# add curl for healthcheck and tini for process management
+# hadolint ignore=DL3018
+RUN apk add --no-cache \
     curl \
-    tini && \
-    rm -rf /var/lib/apt/lists/*
+    tini
 
 WORKDIR /usr/local/app
 
-
+# have nodemon available for local dev use (file watching)
 RUN npm install -g nodemon@3.1.0 && \
     npm cache clean --force
 
@@ -25,5 +23,6 @@ COPY . .
 ENV PORT=80
 EXPOSE 80
 
-ENTRYPOINT ["/usr/bin/tini", "--"]
+# In Alpine, tini is installed to /sbin/tini instead of /usr/bin/tini
+ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["node", "server.js"]
