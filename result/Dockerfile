@@ -1,14 +1,17 @@
 FROM node:18-slim
 
 # add curl for healthcheck
+# hadolint ignore=DL3008
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl tini && \
+    apt-get install -y --no-install-recommends \
+    curl \
+    tini && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /usr/local/app
 
 # have nodemon available for local dev use (file watching)
-RUN npm install -g nodemon
+RUN npm install -g nodemon@3.1.0
 
 COPY package*.json ./
 
