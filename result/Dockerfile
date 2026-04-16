@@ -10,8 +10,9 @@ RUN apt-get update && \
 
 WORKDIR /usr/local/app
 
-# have nodemon available for local dev use (file watching)
-RUN npm install -g nodemon@3.1.0
+
+RUN npm install -g nodemon@3.1.0 && \
+    npm cache clean --force
 
 COPY package*.json ./
 

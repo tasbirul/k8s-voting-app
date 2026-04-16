@@ -2,6 +2,7 @@
 FROM python:3.11-slim AS base
 
 # Add curl for healthcheck.
+# hadolint ignore=DL3008
 RUN apt-get update && \
     apt-get install -y --no-install-recommends curl && \
     rm -rf /var/lib/apt/lists/*
@@ -15,7 +16,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # dev defines a stage for development, where it'll watch for filesystem changes.
 FROM base AS dev
-RUN pip install watchdog
+RUN pip install --no-cache-dir watchdog==4.0.0
 ENV FLASK_ENV=development
 CMD ["python", "app.py"]
 
