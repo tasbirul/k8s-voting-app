@@ -6,7 +6,7 @@ WORKDIR /usr/local/app
 
 COPY package*.json ./
 
-# Install production dependencies only, then cache-bust npm cache
+# Install production dependencies only, then cache-bust npm cache.
 RUN npm ci --omit=dev && \
     npm cache clean --force
 
