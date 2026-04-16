@@ -1,26 +1,27 @@
 FROM node:18-slim
 
-# add curl for healthcheck.
+# Pin versions for apt-get packages (DL3008)
+# versions 7.88.1-10+deb12u8 and 0.19.0-1 are standard for Debian 12 (Bookworm)
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl tini && \
+    apt-get install -y --no-install-recommends \
+    curl=7.88.1-10+deb12u8 \
+    tini=0.19.0-1 && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /usr/local/app
 
-# have nodemon available for local dev use (file watching).
-RUN npm install -g nodemon
+# Pin the version for global npm installs (DL3016)
+RUN npm install -g nodemon@3.0.1 && npm cache clean --force
 
 COPY package*.json ./
-
 RUN npm ci && \
     npm cache clean --force && \
     mv /usr/local/app/node_modules /node_modules
 
 COPY . .
-# Set the port to 80.
+
 ENV PORT=80
-# Expose the port.
 EXPOSE 80
-# Tini is a tiny init for containers.
+
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["node", "server.js"]
