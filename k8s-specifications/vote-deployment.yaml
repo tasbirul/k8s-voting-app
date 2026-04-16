@@ -20,3 +20,28 @@ spec:
         ports:
         - containerPort: 80
           name: vote
+        
+        # Enforce Security Standards
+        securityContext:
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 10001     # Runs the container as a non-privileged user ID
+
+        # Define Resource Allocations
+        resources:
+          requests:
+            cpu: "100m"        # 1/10th of a CPU core requested at startup
+            memory: "64Mi"     # 64 MB of RAM requested
+          limits:
+            cpu: "250m"        # Maximum CPU allowed
+            memory: "128Mi"    # Maximum RAM allowed before being terminated
+
+        # Writable /tmp folder (Required for readOnlyRootFilesystem)
+        volumeMounts:
+        - name: tmp-volume
+          mountPath: /tmp
+      
+      # Defines the temporary volume mapped to the container
+      volumes:
+      - name: tmp-volume
+        emptyDir: {}

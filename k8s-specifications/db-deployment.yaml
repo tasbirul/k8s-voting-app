@@ -14,9 +14,21 @@ spec:
       labels:
         app: db
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
       containers:
       - image: postgres:15-alpine
         name: postgres
+        securityContext:
+          readOnlyRootFilesystem: true
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "250m"
+            memory: "256Mi"
         env:
         - name: POSTGRES_USER
           value: postgres
@@ -28,6 +40,10 @@ spec:
         volumeMounts:
         - mountPath: /var/lib/postgresql/data
           name: db-data
+        - mountPath: /var/run/postgresql
+          name: pg-run
       volumes:
       - name: db-data
-        emptyDir: {} 
+        emptyDir: {}
+      - name: pg-run
+        emptyDir: {}
