@@ -1,17 +1,42 @@
-name: GitOps CI - Voting App
+name: DevSecOps CI Pipeline - Voting App
 
 on:
   push:
     branches: [ dev ]
-    # The pipeline only triggers if code in these specific folders is changed
     paths:
       - 'vote/**'
       - 'result/**'
       - 'worker/**'
+      - 'k8s-specifications/**'
+  workflow_dispatch: 
 
 jobs:
-  # JOB 1: Build and Push Images in Parallel
-  build-images:
+  # JOB 1: REPOSITORY SECURITY & IAC LINTING
+  repo-security:
+    name: Secret & IaC Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Gitleaks needs full history to scan properly
+
+      # 1. Secret Scanning (Gitleaks)
+      - name: Scan for Leaked Secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 2. IaC Security Scan (Kube-linter)
+      - name: Scan Kubernetes Manifests
+        uses: stackrox/kube-linter-action@v1.0.4
+        with:
+          directory: k8s-specifications
+
+  # JOB 2: BUILD, SCAN, AND PUSH
+  build-and-scan:
+    name: Build & Vulnerability Scan
+    needs: repo-security # Only run if repo-security passes
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -21,7 +46,6 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 1. Detect if THIS specific service in the matrix changed
       - name: Check for changes
         uses: dorny/paths-filter@v3
         id: filter
@@ -29,7 +53,40 @@ jobs:
           filters: |
             changed: ['./${{ matrix.service }}/**']
 
-      # 2. Login to Docker Hub (Only if changes detected)
+      # 3. Dockerfile Linting (Hadolint)
+      - name: Lint Dockerfile
+        if: steps.filter.outputs.changed == 'true'
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: ./${{ matrix.service }}/Dockerfile
+
+      # Set up Docker Buildx (required for advanced building)
+      - name: Set up Docker Buildx
+        if: steps.filter.outputs.changed == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      # Build the image, but DO NOT push it yet. Load it locally for scanning.
+      - name: Build Image Locally
+        if: steps.filter.outputs.changed == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: ./${{ matrix.service }}
+          load: true # <--- This keeps the image on the runner instead of pushing
+          tags: ${{ secrets.DOCKER_USERNAME }}/voting-app-${{ matrix.service }}:${{ github.sha }}
+
+      # 4. Container Vulnerability Scanning (Trivy)
+      - name: Run Trivy Vulnerability Scanner
+        if: steps.filter.outputs.changed == 'true'
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ secrets.DOCKER_USERNAME }}/voting-app-${{ matrix.service }}:${{ github.sha }}'
+          format: 'table'
+          exit-code: '1' # <--- Fails the pipeline if CRITICAL/HIGH are found
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+      # Only login and push IF the Trivy scan passes!
       - name: Login to Docker Hub
         if: steps.filter.outputs.changed == 'true'
         uses: docker/login-action@v3
@@ -37,24 +94,20 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # 3. Build and Push (Tagged with the unique Git SHA)
-      - name: Build and Push Image
+      - name: Push Clean Image to Docker Hub
         if: steps.filter.outputs.changed == 'true'
-        uses: docker/build-push-action@v5
-        with:
-          context: ./${{ matrix.service }}
-          push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/voting-app-${{ matrix.service }}:${{ github.sha }}
+        run: docker push ${{ secrets.DOCKER_USERNAME }}/voting-app-${{ matrix.service }}:${{ github.sha }}
 
-  # JOB 2: Update Kubernetes Manifests Safely
+  # JOB 3: GITOPS MANIFEST UPDATE
   update-manifests:
-    needs: build-images
+    name: Update K8s Manifests
+    needs: build-and-scan # Only run if all images build and pass security scans
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          token: ${{ github.token }}
+          token: ${{ secrets.GITHUB_TOKEN }} # Use default token
           fetch-depth: 0
 
       - name: Detect Changed Services
@@ -71,32 +124,23 @@ jobs:
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
           
-          # Conditionally update Vote
           if [ "${{ steps.filter.outputs.vote }}" == "true" ]; then
-            echo "Updating Vote manifest..."
-            # -E enables extended regex. It finds ANY image line containing "vote"
             sed -i -E "s|image: .*vote.*|image: ${{ secrets.DOCKER_USERNAME }}/voting-app-vote:${{ github.sha }}|g" k8s-specifications/vote-deployment.yaml
           fi
           
-          # Conditionally update Result
           if [ "${{ steps.filter.outputs.result }}" == "true" ]; then
-            echo "Updating Result manifest..."
             sed -i -E "s|image: .*result.*|image: ${{ secrets.DOCKER_USERNAME }}/voting-app-result:${{ github.sha }}|g" k8s-specifications/result-deployment.yaml
           fi
           
-          # Conditionally update Worker
           if [ "${{ steps.filter.outputs.worker }}" == "true" ]; then
-            echo "Updating Worker manifest..."
             sed -i -E "s|image: .*worker.*|image: ${{ secrets.DOCKER_USERNAME }}/voting-app-worker:${{ github.sha }}|g" k8s-specifications/worker-deployment.yaml
           fi
           
           git add k8s-specifications/*.yaml
           
-          # Check if there are actually changes to commit
           if git diff --staged --quiet; then
-            echo "No manifest changes required. Exiting cleanly."
+            echo "No manifest changes required."
           else
-            git commit -m "chore: update K8s manifests for GitOps to SHA ${{ github.sha }}"
+            git commit -m "chore: secure GitOps update to SHA ${{ github.sha }}"
             git push origin dev
-            echo "Successfully pushed updated manifests to dev branch!"
           fi
