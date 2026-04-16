@@ -15,7 +15,7 @@ spec:
         app: vote
     spec:
       containers:
-      - image: tasbirul/voting-app-vote:1b89588845f27431336dba488dd9cd9ec2bf2eef
+      - image: tasbirul/voting-app-vote:8aaa6c25581d5088415e863b0a8290251aa59240
         name: vote
         ports:
         - containerPort: 80

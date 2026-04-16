@@ -18,7 +18,7 @@ spec:
         runAsNonRoot: true
         runAsUser: 10001
       containers:
-      - image: tasbirul/voting-app-result:88f0d36d20ebe0144a03d41b028708de2b584404
+      - image: tasbirul/voting-app-result:8aaa6c25581d5088415e863b0a8290251aa59240
         name: result
         securityContext:
           readOnlyRootFilesystem: true
