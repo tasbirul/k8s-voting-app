@@ -1,19 +1,16 @@
 FROM node:18-slim
 
-
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    curl \
-    tini && \
+    curl=7.88.1-10+deb12u8 \
+    tini=0.19.0-1 && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /usr/local/app
 
-
-RUN npm install -g nodemon && npm cache clean --force
+RUN npm install -g nodemon@3.1.9 && npm cache clean --force
 
 COPY package*.json ./
-
 
 RUN npm ci && \
     npm cache clean --force && \
