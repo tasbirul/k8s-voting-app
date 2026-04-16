@@ -17,6 +17,7 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 999
+        fsGroup: 999 
       containers:
       - image: postgres:15-alpine
         name: postgres
@@ -42,8 +43,12 @@ spec:
           name: db-data
         - mountPath: /var/run/postgresql
           name: pg-run
+        - mountPath: /tmp
+          name: tmp-volume
       volumes:
       - name: db-data
         emptyDir: {}
       - name: pg-run
+        emptyDir: {}
+      - name: tmp-volume
         emptyDir: {}
