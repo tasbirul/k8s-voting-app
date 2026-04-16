@@ -4,6 +4,8 @@ metadata:
   labels:
     app: db
   name: db
+  annotations:
+    ignore-check.kube-linter.io/run-as-non-root: "Init container requires temporary root access to chown the Postgres data volume."
 spec:
   replicas: 1
   selector:
@@ -14,20 +16,26 @@ spec:
       labels:
         app: db
     spec:
-      # Pod-level security
       securityContext:
         fsGroup: 999
         runAsNonRoot: true
         runAsUser: 999
 
-      # Init Container to prep the volume
       initContainers:
       - name: fix-permissions
         image: busybox:stable
         command: ["sh", "-c", "chown -R 999:999 /var/lib/postgresql/data && chmod 700 /var/lib/postgresql/data"]
         securityContext:
-          runAsUser: 0 # This container runs as root briefly to fix the folder
+          runAsUser: 0
           runAsNonRoot: false
+          readOnlyRootFilesystem: true 
+        resources:
+          requests:
+            cpu: "10m"
+            memory: "32Mi"
+          limits:
+            cpu: "50m"
+            memory: "64Mi"
         volumeMounts:
         - name: db-data
           mountPath: /var/lib/postgresql/data
@@ -37,7 +45,6 @@ spec:
         name: postgres
         securityContext:
           readOnlyRootFilesystem: true
-          # We don't need to specify runAsUser here as it's inherited from the pod level
         resources:
           requests:
             cpu: "100m"
