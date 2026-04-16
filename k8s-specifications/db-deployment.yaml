@@ -14,15 +14,30 @@ spec:
       labels:
         app: db
     spec:
+      # Pod-level security
       securityContext:
+        fsGroup: 999
         runAsNonRoot: true
         runAsUser: 999
-        fsGroup: 999 
+
+      # Init Container to prep the volume
+      initContainers:
+      - name: fix-permissions
+        image: busybox:stable
+        command: ["sh", "-c", "chown -R 999:999 /var/lib/postgresql/data && chmod 700 /var/lib/postgresql/data"]
+        securityContext:
+          runAsUser: 0 # This container runs as root briefly to fix the folder
+          runAsNonRoot: false
+        volumeMounts:
+        - name: db-data
+          mountPath: /var/lib/postgresql/data
+
       containers:
       - image: postgres:15-alpine
         name: postgres
         securityContext:
           readOnlyRootFilesystem: true
+          # We don't need to specify runAsUser here as it's inherited from the pod level
         resources:
           requests:
             cpu: "100m"
