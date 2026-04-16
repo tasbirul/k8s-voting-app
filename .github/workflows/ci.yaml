@@ -81,7 +81,7 @@ jobs:
         with:
           image-ref: '${{ secrets.DOCKER_USERNAME }}/voting-app-${{ matrix.service }}:${{ github.sha }}'
           format: 'table'
-          exit-code: '1' # <--- Fails the pipeline if CRITICAL/HIGH are found
+          exit-code: '1'
           ignore-unfixed: true
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH'

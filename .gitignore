@@ -23,3 +23,4 @@ node_modules/
 ansible/inventory/hosts
 ansible/.env
 *.log
+

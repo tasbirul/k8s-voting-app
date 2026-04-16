@@ -1,8 +1,6 @@
-FROM node:18-alpine
-
-# add curl for healthcheck and tini for process management
-# hadolint ignore=DL3018
-RUN apk add --no-cache \
+FROM node:22-alpine
+RUN apk update && apk upgrade && \
+    apk add --no-cache \
     curl \
     tini
 
