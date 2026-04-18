@@ -1,9 +1,33 @@
 ---
 # =============================================================================
 # roles/argocd/tasks/main.yml
-# Installs ArgoCD via raw manifests using Server-Side Apply.
+# Installs ArgoCD via Helm, ensuring idempotent deployments and
+# simple service configuration (NodePort).
 # =============================================================================
 
+# ── 1. Ensure Helm is installed ───────────────────────────────────────────────
+- name: "ArgoCD | Check if Helm is already installed"
+  ansible.builtin.command:
+    cmd: helm version --short
+  register: helm_check
+  changed_when: false
+  failed_when: false
+
+- name: "ArgoCD | Download Helm install script"
+  ansible.builtin.get_url:
+    url: https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+    dest: /tmp/get-helm-3.sh
+    mode: '0700'
+  when: helm_check.rc != 0
+
+- name: "ArgoCD | Install Helm"
+  ansible.builtin.command:
+    cmd: /tmp/get-helm-3.sh
+  when: helm_check.rc != 0
+  register: helm_install
+  changed_when: "'helm installed into' in helm_install.stdout"
+
+# ── 2. Create namespace ──────────────────────────────────────────────────────
 - name: "ArgoCD | Create namespace"
   ansible.builtin.command:
     cmd: kubectl --kubeconfig={{ admin_kubeconfig }} create namespace {{ argocd_namespace }}
@@ -13,23 +37,48 @@
     - "'AlreadyExists' not in create_ns.stderr"
   changed_when: "create_ns.rc == 0"
 
-- name: "ArgoCD | Apply installation manifest (Server-Side)"
+# ── 3. Add Argo Helm repository ──────────────────────────────────────────────
+- name: "ArgoCD | Add argo Helm repo"
+  ansible.builtin.command:
+    cmd: helm repo add argo https://argoproj.github.io/argo-helm
+  environment:
+    KUBECONFIG: "{{ admin_kubeconfig }}"
+  register: repo_add
+  changed_when: "'already exists' not in repo_add.stdout"
+  failed_when: "repo_add.rc != 0 and 'already exists' not in repo_add.stdout"
+
+- name: "ArgoCD | Update Helm repositories"
+  ansible.builtin.command:
+    cmd: helm repo update
+  environment:
+    KUBECONFIG: "{{ admin_kubeconfig }}"
+  changed_when: false
+
+# ── 4. Deploy ArgoCD via Helm ────────────────────────────────────────────────
+- name: "ArgoCD | Check if ArgoCD is already deployed"
   ansible.builtin.command:
     cmd: >-
-      kubectl --kubeconfig={{ admin_kubeconfig }} apply 
-      --server-side --force-conflicts
-      -n {{ argocd_namespace }} -f {{ argocd_manifest_url }}
-  register: apply_manifest
-  changed_when: "'created' in apply_manifest.stdout or 'configured' in apply_manifest.stdout"
+      helm --kubeconfig={{ admin_kubeconfig }}
+      status argocd -n {{ argocd_namespace }}
+  register: helm_status
+  changed_when: false
+  failed_when: false
 
-- name: "ArgoCD | Patch service to NodePort"
+- name: "ArgoCD | Deploy ArgoCD via Helm"
   ansible.builtin.command:
     cmd: >-
-      kubectl --kubeconfig={{ admin_kubeconfig }} patch svc argocd-server
-      -n {{ argocd_namespace }} -p '{"spec": {"type": "NodePort"}}'
-  register: patch_svc
-  changed_when: "'patched' in patch_svc.stdout"
+      helm --kubeconfig={{ admin_kubeconfig }} upgrade --install
+      argocd argo/argo-cd
+      --namespace {{ argocd_namespace }}
+      --set fullnameOverride=argocd
+      --set server.service.type=NodePort
+      --wait
+  environment:
+    KUBECONFIG: "{{ admin_kubeconfig }}"
+  register: helm_deploy
+  changed_when: "'deployed' in helm_deploy.stdout or 'upgraded' in helm_deploy.stdout"
 
+# ── 5. Setup & Wait ──────────────────────────────────────────────────────────
 - name: "ArgoCD | Wait for ArgoCD server deployment to be available"
   ansible.builtin.command:
     cmd: >-
@@ -62,7 +111,7 @@
 - name: "ArgoCD | Display Access Info"
   ansible.builtin.debug:
     msg: 
-      - "ArgoCD is installed!"
+      - "ArgoCD is installed via Helm!"
       - "Access URL: https://<master-node-public-ip>:{{ argocd_nodeport.stdout }}"
       - "Username: admin"
       - "Password: {{ argocd_initial_password }}"

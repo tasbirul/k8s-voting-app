@@ -57,6 +57,7 @@
       - lsb-release
     state: present
     update_cache: true
+    cache_valid_time: 3600
 
 - name: "containerd | Create apt keyrings directory"
   ansible.builtin.file:
@@ -87,6 +88,7 @@
     name: containerd.io
     state: present
     update_cache: true
+    cache_valid_time: 3600
 
 - name: "containerd | Ensure /etc/containerd directory exists"
   ansible.builtin.file:
@@ -142,6 +144,7 @@
       - "kubectl"
     state: present
     update_cache: true
+    cache_valid_time: 3600
 
 - name: "Kubernetes | Hold kubelet, kubeadm, and kubectl at current version"
   ansible.builtin.dpkg_selections:
